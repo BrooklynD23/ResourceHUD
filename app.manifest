@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="DeskMon.app" type="win32" />
+
+  <!--
+    Deliberately NOT elevated. Measured on this machine: GPU core, hot spot and
+    memory temperatures, GPU load, VRAM, GPU power, CPU load and RAM all read
+    correctly as a plain user with no kernel driver at all. AMD sensors come from
+    user mode atiadlxx.dll; CPU load comes from performance counters.
+    Only Ryzen Tctl/Tdie needs ring 0, and elevation alone does not provide it;
+    that needs the PawnIO driver, which the app uses when it is installed.
+
+    NB: XML forbids a double hyphen inside a comment. Keep it out of this file.
+  -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- Windows 10 and 11 -->
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
+    </application>
+  </compatibility>
+
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+      <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
+    </windowsSettings>
+  </application>
+
+</assembly>
