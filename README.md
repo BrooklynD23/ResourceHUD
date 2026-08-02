@@ -81,6 +81,24 @@ Elevation alone does **not** help: verified by running elevated, where Tctl stil
 reads exactly `0`. That zero is why the code treats a non-positive CPU temperature as
 missing — otherwise the widget would confidently display "0°".
 
+### NVIDIA and Intel: no fork needed
+
+The GPU path is vendor-agnostic on purpose. LibreHardwareMonitor normalises sensor
+names, so `GPU Core` is the temperature and the load on both NVIDIA and AMD, and
+`GPU Hot Spot` / `GPU Memory Used` / `GPU Memory Total` are shared too. The only
+divergence is board power — NVIDIA calls it `GPU Power`, AMD `GPU Package` — and
+both spellings are matched. NVIDIA readings come from user-mode `nvapi64.dll`, the
+same way AMD's come from `atiadlxx.dll`, so it is equally driver-free and unelevated.
+
+Intel CPUs report `CPU Package` instead of Ryzen's `Core (Tctl/Tdie)`; both are
+matched. The ring-0 constraint on CPU temperature is identical either way.
+
+Developed and measured on a Ryzen 7 5800XT with a Radeon RX 7900 XT, so the AMD path
+is the one confirmed against real hardware. If something reads blank on another
+config, right-click → **Copy sensor list…** dumps every sensor the machine actually
+exposes with its exact name — that is almost always a one-line fix in
+`HardwareMonitor.ReadGpu` or `ReadCpu` rather than a reason to fork.
+
 ## CPU temperature without installing anything
 
 **Is any of this required? No.** These supply exactly one number — the CPU
