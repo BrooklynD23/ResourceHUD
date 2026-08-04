@@ -84,6 +84,8 @@ public sealed class OverlayForm : Form
     private Snapshot _last = new();
     private string? _error;
     private ToolStripMenuItem? _cpuTempItem;
+    private ToolStripMenuItem? _toggleItem;
+    private bool _hotkeyRegistered;
 
     public OverlayForm(Config cfg, HardwareMonitor mon)
     {
@@ -111,7 +113,9 @@ public sealed class OverlayForm : Form
             Text = "DeskMon",
             Visible = true,
         };
-        _tray.DoubleClick += (_, _) => CycleZMode();
+        // Double-click is the natural "get it out of my way / bring it back" gesture.
+        // Placement cycling lives in the menu, where it is discoverable.
+        _tray.DoubleClick += (_, _) => ToggleVisible();
 
         BuildMenu();
         ApplyLayout();
@@ -259,6 +263,76 @@ public sealed class OverlayForm : Form
         ApplyLayout();
     }
 
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        RegisterToggleHotkey();
+    }
+
+    // ------------------------------------------------------------------ toggle
+
+    /// <summary>Show or hide the widget. The tray icon always stays, so it is
+    /// never possible to hide it into a state you cannot get back from.</summary>
+    private void ToggleVisible()
+    {
+        if (Visible)
+        {
+            Hide();
+        }
+        else
+        {
+            Show();
+            // Re-assert placement: while hidden the window took no part in z-order.
+            ApplyZMode();
+        }
+
+        UpdateTrayTip();
+    }
+
+    private void UpdateTrayTip()
+    {
+        var hk = HotkeyText();
+        _tray.Text = Visible
+            ? Trim(_tray.Text, 62)
+            : Trim(hk is null ? "DeskMon (hidden)" : $"DeskMon (hidden) - {hk} to show", 62);
+    }
+
+    /// <summary>Human-readable form of the configured hotkey, or null if disabled.</summary>
+    private string? HotkeyText()
+    {
+        if (!_cfg.HotkeyEnabled) return null;
+
+        var parts = new List<string>(4);
+        if ((_cfg.HotkeyMods & Native.MOD_CONTROL) != 0) parts.Add("Ctrl");
+        if ((_cfg.HotkeyMods & Native.MOD_ALT) != 0) parts.Add("Alt");
+        if ((_cfg.HotkeyMods & Native.MOD_SHIFT) != 0) parts.Add("Shift");
+        if ((_cfg.HotkeyMods & Native.MOD_WIN) != 0) parts.Add("Win");
+
+        var key = (Keys)_cfg.HotkeyKey;
+        parts.Add(key.ToString());
+        return string.Join("+", parts);
+    }
+
+    private void RegisterToggleHotkey()
+    {
+        UnregisterToggleHotkey();
+        if (!_cfg.HotkeyEnabled || !IsHandleCreated) return;
+
+        // MOD_NOREPEAT: holding the keys must fire once, not once per repeat.
+        _hotkeyRegistered = Native.RegisterHotKey(
+            Handle, Native.HotkeyId, _cfg.HotkeyMods | Native.MOD_NOREPEAT, _cfg.HotkeyKey);
+
+        // Registration fails when another app already owns the combination. That is
+        // not fatal -- the tray icon and menu still toggle -- but the menu says so.
+    }
+
+    private void UnregisterToggleHotkey()
+    {
+        if (!_hotkeyRegistered) return;
+        try { Native.UnregisterHotKey(Handle, Native.HotkeyId); } catch { }
+        _hotkeyRegistered = false;
+    }
+
     // ------------------------------------------------------------------ z-order
 
     private void ApplyZMode()
@@ -280,6 +354,12 @@ public sealed class OverlayForm : Form
 
     protected override void WndProc(ref Message m)
     {
+        if (m.Msg == Native.WM_HOTKEY && m.WParam.ToInt32() == Native.HotkeyId)
+        {
+            ToggleVisible();
+            return;
+        }
+
         // Keep the widget glued to the bottom of the z-order in Desktop mode, so
         // clicking it (or any other window activating) never raises it over apps.
         if (m.Msg == Native.WM_WINDOWPOSCHANGING && _cfg.ZMode == ZMode.Desktop)
@@ -808,6 +888,28 @@ public sealed class OverlayForm : Form
 
         menu.Items.Add(new ToolStripMenuItem("Copy sensor list…", null, (_, _) => DumpSensors()));
         menu.Items.Add(new ToolStripSeparator());
+
+        _toggleItem = new ToolStripMenuItem("Hide widget", null, (_, _) => ToggleVisible());
+        menu.Items.Add(_toggleItem);
+        menu.Opening += (_, _) =>
+        {
+            var hk = HotkeyText();
+            var suffix = hk is null ? "" : $"   ({hk})";
+            _toggleItem.Text = (Visible ? "Hide widget" : "Show widget") + suffix;
+            // Flag a hotkey that another application already owns.
+            _toggleItem.ToolTipText = _cfg.HotkeyEnabled && !_hotkeyRegistered
+                ? $"{hk} is already registered by another app; use this menu instead."
+                : null;
+        };
+
+        menu.Items.Add(Check("Global show/hide hotkey", () =>
+        {
+            _cfg.HotkeyEnabled = !_cfg.HotkeyEnabled;
+            _cfg.Save();
+            RegisterToggleHotkey();
+        }, () => _cfg.HotkeyEnabled));
+
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => Close()));
 
         ContextMenuStrip = menu;
@@ -934,6 +1036,7 @@ public sealed class OverlayForm : Form
     {
         if (disposing)
         {
+            UnregisterToggleHotkey();
             _tray.Visible = false;
             _tray.Dispose();
             _fLabel?.Dispose();

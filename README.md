@@ -202,11 +202,19 @@ powershell -ExecutionPolicy Bypass -File .\install-startup.ps1 -Uninstall
 
 ## Using it
 
+- **`Ctrl`+`Alt`+`D`** — global hotkey, shows/hides the widget from anywhere, including
+  inside a game. The process keeps running and the tray icon stays, so it is never
+  possible to hide it into a state you cannot get back from.
+- **Double-click the tray icon** — same show/hide toggle.
 - **Left-drag** anywhere to move it. Snaps to screen edges.
 - **Drag the bottom-right corner** to resize — scales text, rows and graphs together,
   60 %–300 %.
 - **Right-click** (or right-click the tray icon) for the menu.
-- **Double-click the tray icon** cycles placement: on-desktop → always-on-top → normal.
+
+If another application already owns `Ctrl`+`Alt`+`D`, registration fails silently and
+the menu item says so on hover — the tray toggle still works. Turn the hotkey off with
+*Global show/hide hotkey*, or change `HotkeyMods` / `HotkeyKey` in `config.json`
+(modifier bits: 1 = Alt, 2 = Ctrl, 4 = Shift, 8 = Win; `HotkeyKey` is a virtual-key code).
 
 | Menu item | What it does |
 |---|---|
@@ -219,6 +227,8 @@ powershell -ExecutionPolicy Bypass -File .\install-startup.ps1 -Uninstall
 | Show VRAM row | Toggles the VRAM row |
 | GPU hot spot instead of core | Swaps GPU temp to junction temp (higher thresholds) |
 | Lock position | Stops accidental dragging, hides the resize grip |
+| Hide / Show widget | Same as the hotkey; the label shows the current binding |
+| Global show/hide hotkey | Turns the `Ctrl`+`Alt`+`D` registration on or off |
 | Enable CPU temperature… | Only shown when no source is supplying a temperature |
 | Copy sensor list… | Dumps every detected sensor to a text file and opens it |
 

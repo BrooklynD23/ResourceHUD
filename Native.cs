@@ -6,6 +6,18 @@ internal static class Native
 {
     public const int WM_WINDOWPOSCHANGING = 0x0046;
     public const int WM_DISPLAYCHANGE = 0x007E;
+    public const int WM_HOTKEY = 0x0312;
+
+    public const uint MOD_ALT = 0x0001;
+    public const uint MOD_CONTROL = 0x0002;
+    public const uint MOD_SHIFT = 0x0004;
+    public const uint MOD_WIN = 0x0008;
+
+    /// <summary>Stops auto-repeat firing the toggle dozens of times on a held key.</summary>
+    public const uint MOD_NOREPEAT = 0x4000;
+
+    /// <summary>Arbitrary per-window id for our single hotkey.</summary>
+    public const int HotkeyId = 0xD35C;
 
     public const int WS_EX_TOOLWINDOW = 0x00000080;
     public const int WS_EX_NOACTIVATE = 0x08000000;
@@ -48,4 +60,10 @@ internal static class Native
     // so the menu has to ask for it explicitly (KB135788).
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 }

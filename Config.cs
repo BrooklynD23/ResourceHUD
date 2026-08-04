@@ -39,6 +39,15 @@ public sealed class Config
     public double Scale { get; set; } = 1.0;
     public ZMode ZMode { get; set; } = ZMode.Desktop;
     public bool Locked { get; set; }
+
+    /// <summary>Global show/hide hotkey. Default Ctrl+Alt+D.</summary>
+    public bool HotkeyEnabled { get; set; } = true;
+
+    /// <summary>Modifier bits: 1=Alt, 2=Ctrl, 4=Shift, 8=Win.</summary>
+    public uint HotkeyMods { get; set; } = 0x0002 | 0x0001;   // Ctrl+Alt
+
+    /// <summary>Virtual-key code. 0x44 = 'D'.</summary>
+    public uint HotkeyKey { get; set; } = 0x44;
     public bool ShowPower { get; set; } = true;
     public bool ShowVram { get; set; } = true;
     public bool ShowHotspot { get; set; }
