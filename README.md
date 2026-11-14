@@ -1,8 +1,12 @@
-# DeskMon
+# DeskMon HUD
 
-A small always-visible desktop widget showing CPU / GPU / VRAM / RAM usage and
-temperatures. Sits behind your normal windows, above the wallpaper — like a
-stripped-down Task Manager glued to the desktop.
+> Modified from [DeskMon](https://github.com/Kinmanr-ops/DeskMon) by Kinmanr-ops.
+> This is an independent derivative work — see [Docs/UPSTREAM.md](Docs/UPSTREAM.md)
+> and [LICENSE](LICENSE).
+
+A small always-visible desktop HUD showing CPU / GPU / VRAM / RAM usage and
+temperatures. It can sit behind normal windows or stay topmost — like a
+stripped-down Task Manager glued to the screen.
 
 ```
 ┌────────────────────────────────┐
@@ -290,8 +294,10 @@ LHM version, whether the process is elevated, and whether PawnIO is present.
 | `CpuTempChain.cs` | Tries each external CPU-temperature source in order |
 | `NamedSection.cs` | Shared-memory attach/detach plumbing, plus the `ICpuTempSource` interface |
 | `AfterburnerSensors.cs` | MSI Afterburner `MAHMSharedMemory` reader |
-| `HwInfoSensors.cs` | HWiNFO `HWiNFO_SENS_SM2` reader |
+| `HwInfoSensors.cs` | HWiNFO `HWiNFO_SENS_SM2` CPU-temperature source |
+| `HwInfoSharedSensors.cs` | HWiNFO `HWiNFO_SENS_SM2` full sensor reader |
 | `HwInfoVsbSensors.cs` | HWiNFO Gadget/VSB registry reader |
+| `ProcessMonitor.cs` | Top-process sampler shown under the hardware rows |
 | `CoreTempSensors.cs` | Core Temp `CoreTempMappingObject` reader |
 | `Native.cs` | Win32 P/Invoke and constants |
 | `Config.cs` | JSON settings in `%APPDATA%\DeskMon`, clamped on load |
@@ -307,7 +313,9 @@ machine. If one of them misbehaves in the wild, that is the first place to look.
 
 ## License and credits
 
-DeskMon is MIT licensed — see [LICENSE](LICENSE). Use it, fork it, ship it.
+This project is MIT licensed — see [LICENSE](LICENSE) and [Docs/UPSTREAM.md](Docs/UPSTREAM.md).
+It is a modified derivative of [DeskMon](https://github.com/Kinmanr-ops/DeskMon) by Kinmanr-ops;
+the original work remains MIT licensed and credited to its authors.
 
 It depends on [LibreHardwareMonitorLib](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor),
 licensed under the **Mozilla Public License 2.0**. The self-contained build bundles that
