@@ -16,6 +16,9 @@ public sealed class OverlayForm : Form
     private const int Radius = 10;
     private const int HistLen = 64;
     private const int GripSize = 13;
+    private const int ProcPadTop = 5;
+    private const int ProcTitleH = 12;
+    private const int ProcRowH = 15;
 
     public const double MinScale = 0.6;
     public const double MaxScale = 3.0;
@@ -31,6 +34,8 @@ public sealed class OverlayForm : Form
         public string Right2 = "";
         public Color Right2Color = Palette.TextDim;
         public bool Right2Wide;   // draw Right2 across both right columns
+        public bool HasDot;
+        public Color DotColor = Palette.Border;
 
         public void Push(double pct)
         {
@@ -163,7 +168,8 @@ public sealed class OverlayForm : Form
         _rows.Add(_ram);
 
         int w = R(BaseW);
-        int h = R(PadY * 2) + _rows.Count * R(RowH);
+        int h = R(PadY * 2) + _rows.Count * R(RowH) +
+                R(ProcPadTop + ProcTitleH + 3 * ProcRowH);
         ClientSize = new Size(w, h);
 
         if (reposition) PlaceOnScreen();
@@ -555,6 +561,8 @@ public sealed class OverlayForm : Form
             _cpu.Right2 = Temp(s.CpuTemp);
             _cpu.Right2Color = TempColor(s.CpuTemp, 60, 75, 85);
         }
+        _cpu.HasDot = true;
+        _cpu.DotColor = s.CpuThrottling ? Palette.Crit : Palette.Border;
 
         _gpu.Push(s.GpuLoad);
         _gpu.Right1 = Pct(s.GpuLoad);
@@ -578,10 +586,10 @@ public sealed class OverlayForm : Form
         _vram.Right2Wide = true;
 
         _ram.Push(s.RamLoad);
-        _ram.Right1 = "";
-        _ram.Right2 = Gb(s.RamUsedGb, s.RamTotalGb);
-        _ram.Right2Color = Palette.Text;
-        _ram.Right2Wide = true;
+        _ram.Right1 = Pct(s.RamLoad);
+        _ram.Right2 = Temp(s.RamTemp);
+        _ram.Right2Color = TempColor(s.RamTemp, 60, 75, 85);
+        _ram.Right2Wide = false;
 
         UpdateTooltip(s);
         Invalidate();
@@ -667,6 +675,8 @@ public sealed class OverlayForm : Form
             y += rowH;
         }
 
+        DrawProcs(g, y);
+
         if (!_cfg.Locked) DrawGrip(g);
     }
 
@@ -703,6 +713,16 @@ public sealed class OverlayForm : Form
         TextRenderer.DrawText(g, row.Right2, _fValue, col2Rect, row.Right2Color,
             TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
 
+        if (row.HasDot)
+        {
+            int dotD = R(6);
+            int textW = TextRenderer.MeasureText(g, row.Right2, _fValue).Width;
+            int dotX = col2Rect.Right - textW - R(4) - dotD;
+            int dotY = bounds.Y + (bounds.Height - dotD) / 2;
+            using var dotBrush = new SolidBrush(row.DotColor);
+            g.FillEllipse(dotBrush, dotX, dotY, dotD, dotD);
+        }
+
         if (!row.Right2Wide)
         {
             var col1Rect = new Rectangle(bounds.Right - col2W - col1W, bounds.Y, col1W, bounds.Height);
@@ -717,6 +737,41 @@ public sealed class OverlayForm : Form
             bounds.Height - R(8));
 
         if (graph.Width > R(8)) DrawSparkline(g, row, graph);
+    }
+
+    private void DrawProcs(Graphics g, int y)
+    {
+        int titleH = R(ProcTitleH);
+        int rowH = R(ProcRowH);
+        var titleRect = new Rectangle(R(PadX), y, Width - R(PadX * 2), titleH);
+        TextRenderer.DrawText(g, "TOP PROCS", _fLabel, titleRect, Palette.TextDim,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+        y += titleH;
+
+        var procs = _last.TopProcs;
+        for (int i = 0; i < 3; i++)
+        {
+            var line = new Rectangle(R(PadX), y + i * rowH, Width - R(PadX * 2), rowH);
+            DrawProcLine(g, i < procs.Length ? procs[i] : null, line);
+        }
+    }
+
+    private void DrawProcLine(Graphics g, ProcInfo? p, Rectangle line)
+    {
+        var nameRect = new Rectangle(line.X, line.Y, Math.Max(R(20), line.Width - R(78)), line.Height);
+        var cpuRect = new Rectangle(line.Right - R(76), line.Y, R(34), line.Height);
+        var memRect = new Rectangle(line.Right - R(40), line.Y, R(40), line.Height);
+
+        string name = p?.Name ?? "--";
+        string cpu = p is null ? "--" : $"{p.Cpu:0}%";
+        string mem = p is null ? "" : p.MemMb >= 1024 ? $"{p.MemMb / 1024.0:0.0}G" : $"{p.MemMb:0}M";
+
+        TextRenderer.DrawText(g, name, _fValue, nameRect, Palette.Text,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+        TextRenderer.DrawText(g, cpu, _fValue, cpuRect, Palette.Text,
+            TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+        TextRenderer.DrawText(g, mem, _fValue, memRect, Palette.TextDim,
+            TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
     }
 
     private void DrawSparkline(Graphics g, Row row, Rectangle r)

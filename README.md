@@ -140,10 +140,16 @@ The mechanism, all verified against the live section on this machine:
 - `FLT_MAX` sentinels are rejected — Afterburner parks its framerate entries there
   when no game is running
 
-Precedence is: direct sensor read → Afterburner → HWiNFO → Core Temp → `n/a`. If you
+Precedence is: direct sensor read → Afterburner → HWiNFO → Core Temp → HWiNFO Gadget → `n/a`. If you
 later install a ring-0 source of DeskMon's own, that wins and none of the external
 tools is queried. Power and clock are filled in independently of temperature, since
 each reading is toggled separately in these tools' own settings.
+
+### HWiNFO Gadget/VSB feed
+
+`HwInfoVsbSensors.cs` reads `HKCU`/`HKLM\Software\HWiNFO64\VSB`. Unlike shared memory this feed has **no Pro time limit**, but HWiNFO only exports sensor elements ticked under *Configure Sensors → HWiNFO Gadget*. DeskMon matches by sensor name + reading label + formatted unit, so the volatile `VSBidx` numbers do not matter.
+
+On this laptop LibreHardwareMonitor sees CPU/GPU/RAM loads and shared GPU memory but **no temperatures**. The VSB feed is the temperature path. In HWiNFO: *Sensors → Configure Sensors → HWiNFO Gadget → Enable reporting to Gadget*, then *Report value in Gadget* for the CPU package temperature, GPU temperature / hot spot, and any memory/DRAM temperature HWiNFO exposes. Restart HWiNFO if it was already running with old settings. If the hardware has no RAM temperature sensor, that cell stays `n/a` honestly.
 
 ### Paths that were investigated and rejected
 
@@ -285,6 +291,7 @@ LHM version, whether the process is elevated, and whether PawnIO is present.
 | `NamedSection.cs` | Shared-memory attach/detach plumbing, plus the `ICpuTempSource` interface |
 | `AfterburnerSensors.cs` | MSI Afterburner `MAHMSharedMemory` reader |
 | `HwInfoSensors.cs` | HWiNFO `HWiNFO_SENS_SM2` reader |
+| `HwInfoVsbSensors.cs` | HWiNFO Gadget/VSB registry reader |
 | `CoreTempSensors.cs` | Core Temp `CoreTempMappingObject` reader |
 | `Native.cs` | Win32 P/Invoke and constants |
 | `Config.cs` | JSON settings in `%APPDATA%\DeskMon`, clamped on load |

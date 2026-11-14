@@ -23,11 +23,21 @@ public sealed class HwInfoSensors : ICpuTempSource
 
     private const int HdrSignature = 0;
     private const int HdrPollTime = 12;                 // __time64_t, 8 bytes
+    private const int HdrOffsetOfSensorSection = 20;
+    private const int HdrSizeOfSensorElement = 24;
+    private const int HdrNumSensorElements = 28;
     private const int HdrOffsetOfReadingSection = 32;
     private const int HdrSizeOfReadingElement = 36;
     private const int HdrNumReadingElements = 40;
 
+    private const int SeId = 0;
+    private const int SeInst = 4;
+    private const int SeNameOrig = 8;
+    private const int SeNameUser = 136;
+
     private const int RdType = 0;
+    private const int RdSensorIndex = 4;
+    private const int RdReadingId = 8;
     private const int RdLabelOrig = 12;
     private const int RdLabelUser = 140;
     private const int RdValue = 284;                    // after szUnit[16] at 268
@@ -133,6 +143,66 @@ public sealed class HwInfoSensors : ICpuTempSource
     private static bool IsCpuClock(string l) =>
         l.Equals("Core 0 Clock", StringComparison.OrdinalIgnoreCase) ||
         l.Equals("Average Effective Clock", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Dumps every published reading with its sensor id/instance, for mapping
+    /// labels onto the VSB registry keys. Diagnostic only.
+    /// </summary>
+    public string Dump()
+    {
+        var sb = new System.Text.StringBuilder();
+        try
+        {
+            if (!_section.Attach()) { sb.AppendLine("HWiNFO shared memory not available."); return sb.ToString(); }
+            var acc = _section.Accessor!;
+            if (acc.ReadUInt32(HdrSignature) != Signature) { _section.Detach(); sb.AppendLine("Bad signature."); return sb.ToString(); }
+
+            uint sOff = acc.ReadUInt32(HdrOffsetOfSensorSection);
+            uint sSize = acc.ReadUInt32(HdrSizeOfSensorElement);
+            uint sCount = acc.ReadUInt32(HdrNumSensorElements);
+            uint rOff = acc.ReadUInt32(HdrOffsetOfReadingSection);
+            uint rSize = acc.ReadUInt32(HdrSizeOfReadingElement);
+            uint rCount = acc.ReadUInt32(HdrNumReadingElements);
+
+            if (sSize < SeNameUser + LabelLen || rSize < RdValue + 8 ||
+                !_section.Fits(sOff, sCount, sSize) || !_section.Fits(rOff, rCount, rSize))
+            {
+                _section.Detach();
+                sb.AppendLine("Section bounds check failed.");
+                return sb.ToString();
+            }
+
+            var sensors = new string[sCount];
+            for (uint i = 0; i < sCount; i++)
+            {
+                long b = sOff + (long)i * sSize;
+                uint id = acc.ReadUInt32(b + SeId);
+                uint inst = acc.ReadUInt32(b + SeInst);
+                var orig = _section.ReadAnsi(b + SeNameOrig, LabelLen, _scratch);
+                var user = _section.ReadAnsi(b + SeNameUser, LabelLen, _scratch);
+                sensors[i] = $"{id:X8}_{inst} {(user.Length > 0 ? user : orig)}";
+            }
+
+            for (uint i = 0; i < rCount; i++)
+            {
+                long b = rOff + (long)i * rSize;
+                uint type = acc.ReadUInt32(b + RdType);
+                uint sIdx = acc.ReadUInt32(b + RdSensorIndex);
+                uint rId = acc.ReadUInt32(b + RdReadingId);
+                var label = _section.ReadAnsi(b + RdLabelOrig, LabelLen, _scratch);
+                var unit = _section.ReadAnsi(b + RdValue - 16, 16, _scratch);
+                double v = acc.ReadDouble(b + RdValue);
+                var sname = sIdx < sensors.Length ? sensors[sIdx] : $"#{sIdx}";
+                sb.AppendLine($"{type,2} {sname,-45} {label,-40} {unit,-8} {v:0.###}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _section.Detach();
+            sb.AppendLine("Dump failed: " + ex.Message);
+        }
+        return sb.ToString();
+    }
 
     public void Dispose() => _section.Dispose();
 }

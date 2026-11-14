@@ -18,6 +18,7 @@ public sealed class Snapshot
     public double VramTotalGb = double.NaN;
 
     public double RamLoad = double.NaN;
+    public double RamTemp = double.NaN;
     public double RamUsedGb = double.NaN;
     public double RamTotalGb = double.NaN;
 
@@ -43,6 +44,28 @@ public sealed class Snapshot
 
     /// <summary>Which external tool supplied it, when CpuTempFrom is External.</summary>
     public string? CpuTempSourceName;
+
+    /// <summary>CPU thermal throttling / thermal-event flag from HWiNFO shared memory.</summary>
+    public bool CpuThrottling;
+
+    /// <summary>Top resource-heavy processes, refreshed about every 5 seconds.</summary>
+    public ProcInfo[] TopProcs = Array.Empty<ProcInfo>();
+
+    public string Describe()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"CPU  load {N(CpuLoad, "0.0")}  temp {N(CpuTemp, "0.0")}  thr {(CpuThrottling ? "on" : "off")}  power {N(CpuPower, "0.0")}  clock {N(CpuClock, "0")}");
+        sb.AppendLine($"GPU  load {N(GpuLoad, "0.0")}  temp {N(GpuTemp, "0.0")}  hot {N(GpuHotspot, "0.0")}  power {N(GpuPower, "0.0")}");
+        sb.AppendLine($"VRAM {N(VramUsedGb, "0.0")}/{N(VramTotalGb, "0.0")} GB");
+        sb.AppendLine($"RAM  load {N(RamLoad, "0.0")}  temp {N(RamTemp, "0.0")}  {N(RamUsedGb, "0.0")}/{N(RamTotalGb, "0.0")} GB");
+        foreach (var p in TopProcs)
+            sb.AppendLine($"PROC {p.Name,-24} cpu {p.Cpu,5:0}%  mem {p.MemMb / 1024.0,5:0.0}G");
+        if (Error is not null) sb.AppendLine("Error: " + Error);
+        return sb.ToString();
+    }
+
+    private static string N(double v, string fmt) =>
+        double.IsNaN(v) ? "n/a" : v.ToString(fmt, System.Globalization.CultureInfo.InvariantCulture);
 }
 
 public enum CpuTempSource
@@ -63,6 +86,9 @@ public sealed class HardwareMonitor : IDisposable
 {
     private readonly Computer _computer;
     private readonly CpuTempChain _external = new();
+    private readonly HwInfoSharedSensors _hwShared = new();
+    private readonly HwInfoVsbSensors _vsb = new();
+    private readonly ProcessMonitor _procs = new();
     private readonly List<IHardware> _flat = new();
     private Thread? _thread;
     private readonly ManualResetEventSlim _stop = new(false);
@@ -230,6 +256,59 @@ public sealed class HardwareMonitor : IDisposable
             if (double.IsNaN(s.CpuClock)) s.CpuClock = _external.CpuClock;
         }
 
+        // HWiNFO shared memory carries every monitored reading, including GPU/RAM
+        // temperatures. The free build disables it after 12 hours, so the VSB
+        // registry feed below remains the permanent fallback.
+        _hwShared.Update();
+
+        if (double.IsNaN(s.CpuTemp) && !double.IsNaN(_hwShared.CpuTemp))
+        {
+            s.CpuTemp = _hwShared.CpuTemp;
+            s.CpuTempFrom = CpuTempSource.External;
+            s.CpuTempSourceName = _hwShared.Name;
+            s.CpuTempNeedsDriver = false;
+        }
+
+        if (double.IsNaN(s.CpuLoad)) s.CpuLoad = _hwShared.CpuLoad;
+        if (double.IsNaN(s.CpuPower)) s.CpuPower = _hwShared.CpuPower;
+        if (double.IsNaN(s.CpuClock)) s.CpuClock = _hwShared.CpuClock;
+        if (double.IsNaN(s.GpuLoad)) s.GpuLoad = _hwShared.GpuLoad;
+        if (double.IsNaN(s.GpuTemp)) s.GpuTemp = _hwShared.GpuTemp;
+        if (double.IsNaN(s.GpuHotspot)) s.GpuHotspot = _hwShared.GpuHotspot;
+        if (double.IsNaN(s.GpuPower)) s.GpuPower = _hwShared.GpuPower;
+        if (double.IsNaN(s.VramUsedGb)) s.VramUsedGb = _hwShared.VramUsedGb;
+        if (double.IsNaN(s.VramTotalGb)) s.VramTotalGb = _hwShared.VramTotalGb;
+        if (double.IsNaN(s.RamLoad)) s.RamLoad = _hwShared.RamLoad;
+        if (double.IsNaN(s.RamTemp)) s.RamTemp = _hwShared.RamTemp;
+
+        // HWiNFO's Gadget registry feed has no Pro time limit like shared memory.
+        // It is updated every poll because it also carries GPU/RAM temperatures.
+        _vsb.Update();
+
+        if (double.IsNaN(s.CpuTemp) && !double.IsNaN(_vsb.CpuTemp))
+        {
+            s.CpuTemp = _vsb.CpuTemp;
+            s.CpuTempFrom = CpuTempSource.External;
+            s.CpuTempSourceName = _vsb.Name;
+            s.CpuTempNeedsDriver = false;
+        }
+
+        if (double.IsNaN(s.CpuLoad)) s.CpuLoad = _vsb.CpuLoad;
+        if (double.IsNaN(s.CpuPower)) s.CpuPower = _vsb.CpuPower;
+        if (double.IsNaN(s.CpuClock)) s.CpuClock = _vsb.CpuClock;
+        if (double.IsNaN(s.GpuLoad)) s.GpuLoad = _vsb.GpuLoad;
+        if (double.IsNaN(s.GpuTemp)) s.GpuTemp = _vsb.GpuTemp;
+        if (double.IsNaN(s.GpuHotspot)) s.GpuHotspot = _vsb.GpuHotspot;
+        if (double.IsNaN(s.GpuPower)) s.GpuPower = _vsb.GpuPower;
+        if (double.IsNaN(s.VramUsedGb)) s.VramUsedGb = _vsb.VramUsedGb;
+        if (double.IsNaN(s.VramTotalGb)) s.VramTotalGb = _vsb.VramTotalGb;
+        if (double.IsNaN(s.RamLoad)) s.RamLoad = _vsb.RamLoad;
+        if (double.IsNaN(s.RamTemp)) s.RamTemp = _vsb.RamTemp;
+
+        s.CpuThrottling = _hwShared.CpuThrottling;
+        _procs.Update();
+        s.TopProcs = _procs.Top;
+
         return s;
     }
 
@@ -237,8 +316,16 @@ public sealed class HardwareMonitor : IDisposable
     {
         foreach (var sensor in hw.Sensors)
         {
-            if (sensor.Value is not float v) continue;
             var n = sensor.Name;
+            bool cpuTempSensor = sensor.SensorType == SensorType.Temperature &&
+                (n.StartsWith("Core (Tctl", StringComparison.Ordinal) || n == "CPU Package");
+
+            if (sensor.Value is not float v)
+            {
+                // The sensor exists but has no ring-0 path, so Value stays null.
+                if (cpuTempSensor) s.CpuTempNeedsDriver = true;
+                continue;
+            }
 
             switch (sensor.SensorType)
             {
@@ -266,6 +353,10 @@ public sealed class HardwareMonitor : IDisposable
 
     private static void ReadGpu(IHardware hw, Snapshot s)
     {
+        // Intel Arc exposes per-engine D3D loads instead of a single "GPU Core".
+        double engineLoad = double.NaN;
+        double sharedUsed = double.NaN, sharedTotal = double.NaN;
+
         foreach (var sensor in hw.Sensors)
         {
             if (sensor.Value is not float v) continue;
@@ -275,6 +366,15 @@ public sealed class HardwareMonitor : IDisposable
             {
                 case SensorType.Load when n == "GPU Core":
                     s.GpuLoad = v;
+                    break;
+
+                case SensorType.Load when n.StartsWith("D3D", StringComparison.Ordinal) ||
+                                           n.Contains("3D", StringComparison.OrdinalIgnoreCase) ||
+                                           n.Contains("Compute", StringComparison.OrdinalIgnoreCase) ||
+                                           n.Contains("Copy", StringComparison.OrdinalIgnoreCase) ||
+                                           n.Contains("Video", StringComparison.OrdinalIgnoreCase) ||
+                                           n.Contains("Engine", StringComparison.OrdinalIgnoreCase):
+                    if (double.IsNaN(engineLoad) || v > engineLoad) engineLoad = v;
                     break;
 
                 case SensorType.Temperature:
@@ -300,8 +400,22 @@ public sealed class HardwareMonitor : IDisposable
                     if (Positive(v) && (double.IsNaN(s.VramTotalGb) || n == "GPU Memory Total"))
                         s.VramTotalGb = v / 1024.0;
                     break;
+
+                // Integrated Arc has no dedicated-memory pair; shared memory is the
+                // closest thing LHM exposes. Used only when the dedicated pair is absent.
+                case SensorType.SmallData when n == "D3D Shared Memory Used":
+                    sharedUsed = v;
+                    break;
+
+                case SensorType.SmallData when n == "D3D Shared Memory Total":
+                    sharedTotal = v;
+                    break;
             }
         }
+
+        if (double.IsNaN(s.VramUsedGb) && !double.IsNaN(sharedUsed)) s.VramUsedGb = sharedUsed / 1024.0;
+        if (double.IsNaN(s.VramTotalGb) && Positive((float)sharedTotal)) s.VramTotalGb = sharedTotal / 1024.0;
+        if (double.IsNaN(s.GpuLoad) && !double.IsNaN(engineLoad)) s.GpuLoad = engineLoad;
     }
 
     private static void ReadMemory(IHardware hw, Snapshot s)
@@ -321,6 +435,9 @@ public sealed class HardwareMonitor : IDisposable
             {
                 case SensorType.Load when sensor.Name == "Memory":
                     s.RamLoad = v;
+                    break;
+                case SensorType.Temperature when Positive(v):
+                    if (double.IsNaN(s.RamTemp) || v > s.RamTemp) s.RamTemp = v;
                     break;
                 case SensorType.Data when sensor.Name == "Memory Used":
                     used = v;
@@ -376,6 +493,8 @@ public sealed class HardwareMonitor : IDisposable
         sb.AppendLine($"PawnIO      : {(IsPawnIOInstalled() ? "installed" : "not installed")}");
         sb.AppendLine("External CPU temperature sources:");
         sb.Append(_external.Describe());
+        sb.Append(_hwShared.Describe());
+        sb.Append(_vsb.Describe());
         sb.AppendLine($"Opened      : {_opened}");
         sb.AppendLine();
 
@@ -426,6 +545,8 @@ public sealed class HardwareMonitor : IDisposable
                 try { _computer.Close(); } catch { /* backend may already be gone */ }
             }
             _external.Dispose();
+            _hwShared.Dispose();
+            _vsb.Dispose();
             _stop.Dispose();
         }
         // If the thread is wedged, leak both rather than crash on the way out --

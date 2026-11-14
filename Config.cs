@@ -37,7 +37,7 @@ public sealed class Config
     public int IntervalMs { get; set; } = 1500;
     public double Opacity { get; set; } = 0.88;
     public double Scale { get; set; } = 1.0;
-    public ZMode ZMode { get; set; } = ZMode.Desktop;
+    public ZMode ZMode { get; set; } = ZMode.Topmost;
     public bool Locked { get; set; }
 
     /// <summary>Global show/hide hotkey. Default Ctrl+Alt+D.</summary>
