@@ -1,6 +1,6 @@
 # Upstream and credits
 
-This repository is a modified derivative of **DeskMon** by **Kinmanr-ops**.
+This repository is **ResourceHUD**, a modified derivative of **DeskMon** by **Kinmanr-ops**.
 
 - Upstream repository: <https://github.com/Kinmanr-ops/DeskMon>
 - Original license: MIT — see [LICENSE](../LICENSE)

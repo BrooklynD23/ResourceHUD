@@ -1,4 +1,4 @@
-# DeskMon HUD
+# ResourceHUD
 
 > Modified from [DeskMon](https://github.com/Kinmanr-ops/DeskMon) by Kinmanr-ops.
 > This is an independent derivative work — see [Docs/UPSTREAM.md](Docs/UPSTREAM.md)
